@@ -333,7 +333,7 @@ async function addVariant(ref, label) {
   frameBox.appendChild(spinnerOverlay('Building…'));
 
   const controls = document.createElement('div');
-  controls.className = 'tile-controls';
+  controls.className = 'tile-controls collapsed'; // start collapsed for a clean zoomed-out board
   toggleBtn.addEventListener('click', () => controls.classList.toggle('collapsed'));
 
   tile.append(head, frameBox, controls);

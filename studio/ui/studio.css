@@ -95,7 +95,7 @@ body {
 }
 .tile {
   border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
-  background: var(--panel); display: flex; flex-direction: column; min-height: 280px;
+  background: var(--panel); display: flex; flex-direction: column; min-height: 420px;
 }
 .tile-head {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
