@@ -299,6 +299,11 @@ class DialStoreClass {
   // drives values and the in-iframe panel is hidden. These are inert otherwise.
   private embedded = false;
   private panelsHidden = false;
+  // Whether this prototype is the focused/active one in Studio. Hosts with an
+  // expensive animation loop can subscribe and pause themselves when inactive
+  // (backgrounded behind a zoomed tile). Always true outside Studio.
+  private active = true;
+  private activeListeners: Set<(active: boolean) => void> = new Set();
   // Externally pushed values buffered until their panel registers. The parent
   // often pushes a tile's dial config before the iframe's component tree mounts.
   private panelOverrides: Map<string, Record<string, DialValue>> = new Map();
@@ -481,6 +486,27 @@ class DialStoreClass {
 
   arePanelsHidden(): boolean {
     return this.panelsHidden;
+  }
+
+  /**
+   * Mark this prototype active (focused) or inactive (backgrounded). Studio
+   * drives this so unfocused tiles can quiesce. The library cannot stop host
+   * code, so this is an opt-in signal: hosts subscribe via subscribeActive and
+   * pause their own animation/render loops while inactive.
+   */
+  setActive(active: boolean): void {
+    if (this.active === active) return;
+    this.active = active;
+    this.activeListeners.forEach(fn => fn(active));
+  }
+
+  isActive(): boolean {
+    return this.active;
+  }
+
+  subscribeActive(listener: (active: boolean) => void): () => void {
+    this.activeListeners.add(listener);
+    return () => this.activeListeners.delete(listener);
   }
 
   /**

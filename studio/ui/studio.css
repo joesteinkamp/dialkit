@@ -115,6 +115,49 @@ body {
 }
 .tile-controls.collapsed { display: none; }
 
+/* Click-catcher over the grid iframe: click = zoom, not interact. */
+.tile-clickcatch { position: absolute; inset: 0; cursor: zoom-in; z-index: 1; }
+.tile.is-zoomed .tile-clickcatch { display: none; } /* focused prototype is live */
+
+/* Zoom: focus one variant on a centered stage (animated in place by the View
+   Transitions API). The iframe never moves in the DOM, so the prototype keeps
+   its live state across the morph. */
+.tile.is-zoomed {
+  position: fixed; inset: 5vh 6vw; z-index: 50; min-height: 0;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+.tile-placeholder { min-height: 420px; border-radius: 10px; }
+
+.zoom-backdrop {
+  position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.6);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease; cursor: zoom-out;
+}
+.zoom-backdrop.is-visible { opacity: 1; pointer-events: auto; }
+
+.zoom-bar {
+  position: fixed; top: max(6px, calc(5vh - 38px)); right: 6vw; z-index: 60;
+  display: none; align-items: center; gap: 4px;
+  padding: 4px 6px; border-radius: 8px;
+  background: var(--panel-2); border: 1px solid var(--border);
+}
+.zoom-bar.is-visible { display: flex; }
+.zoom-index { color: var(--muted); font-size: 12px; padding: 0 6px; min-width: 44px; text-align: center; }
+
+.zoom-dials {
+  position: fixed; top: 5vh; right: 6vw; bottom: 5vh; width: 280px; z-index: 60;
+  overflow: auto; padding: 8px 0;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+.zoom-dials.collapsed { display: none; }
+
+/* Tune the morph; respect reduced-motion by dropping it entirely. */
+::view-transition-group(zt-target),
+::view-transition-group(zt-prev) { animation-duration: 0.26s; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*) { animation: none !important; }
+}
+
 /* Generic controls */
 .ctl { padding: 7px 14px; border-bottom: 1px solid var(--border); }
 .ctl:last-child { border-bottom: 0; }

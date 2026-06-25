@@ -2,8 +2,9 @@
 //
 // Connects a prototype running inside an iframe to a DialKit Studio parent
 // window over postMessage. The Studio can discover the prototype's panels,
-// push dial configurations into it, and hide the in-iframe control panel so the
-// parent drives values. Pure TypeScript — no framework dependency — so it works
+// push dial configurations into it, hide the in-iframe control panel so the
+// parent drives values, and mark it active/inactive (set-active) so a
+// backgrounded tile can quiesce. Pure TypeScript — no framework dependency — so it works
 // across every adapter, talking to the same singleton DialStore the adapter uses.
 //
 // React hosts should import this from `dialkit` (it is bundled with the React
@@ -25,6 +26,7 @@ export type StudioInboundMessage =
   | (Envelope & { type: 'handshake'; studioOrigin: string })
   | (Envelope & { type: 'value-push'; panelId: string; values: Record<string, DialValue> })
   | (Envelope & { type: 'set-panels-hidden'; hidden: boolean })
+  | (Envelope & { type: 'set-active'; active: boolean })
   | (Envelope & { type: 'reset'; panelId: string });
 
 /** Messages the embedded prototype sends up to the Studio parent. */
@@ -51,6 +53,15 @@ let embeddedFlag = false;
 /** True once this prototype is connected to a DialKit Studio parent. */
 export function isDialKitEmbedded(): boolean {
   return embeddedFlag;
+}
+
+/**
+ * Whether this prototype is the focused/active tile in Studio (true outside
+ * Studio). Hosts with an expensive animation loop can gate it on this — or
+ * subscribe via `DialStore.subscribeActive` — to pause while backgrounded.
+ */
+export function isDialKitActive(): boolean {
+  return DialStore.isActive();
 }
 
 /**
@@ -87,8 +98,11 @@ export function connectDialKitStudio(opts: ConnectStudioOptions = {}): () => voi
   const sendPanelSync = (): void =>
     post({ dk: PROTOCOL_TAG, v: PROTOCOL_VERSION, type: 'panel-sync', panels: DialStore.getPanels() });
 
-  const sendValueSync = (panelId: string): void =>
+  const sendValueSync = (panelId: string): void => {
+    // Skip chatter for backgrounded tiles; syncAll() re-converges on re-activation.
+    if (!DialStore.isActive()) return;
     post({ dk: PROTOCOL_TAG, v: PROTOCOL_VERSION, type: 'value-sync', panelId, values: { ...DialStore.getValues(panelId) } });
+  };
 
   // Keep per-panel value/action subscriptions in sync with the live panel set.
   const reconcileSubscriptions = (): void => {
@@ -170,6 +184,14 @@ export function connectDialKitStudio(opts: ConnectStudioOptions = {}): () => voi
         break;
       case 'set-panels-hidden':
         if (typeof data.hidden === 'boolean') DialStore.setPanelsHidden(data.hidden);
+        break;
+      case 'set-active':
+        if (typeof data.active === 'boolean') {
+          DialStore.setActive(data.active);
+          // Re-converge the parent on re-activation: value-sync is suppressed
+          // while inactive (below), so push a fresh snapshot when focus returns.
+          if (data.active) syncAll();
+        }
         break;
       case 'reset':
         if (typeof data.panelId === 'string') DialStore.resetValues(data.panelId);

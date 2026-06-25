@@ -23,7 +23,7 @@ export { ShortcutsMenu } from './components/ShortcutsMenu';
 
 // DialKit Studio bridge (re-exported so React hosts share this build's DialStore
 // singleton; non-React adapters import the same API from `dialkit/bridge`).
-export { connectDialKitStudio, isDialKitEmbedded } from './bridge';
+export { connectDialKitStudio, isDialKitEmbedded, isDialKitActive } from './bridge';
 export type {
   ConnectStudioOptions,
   StudioInboundMessage,
