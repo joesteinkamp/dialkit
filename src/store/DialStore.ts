@@ -295,6 +295,13 @@ class DialStoreClass {
   private registrationCounts: Map<string, number> = new Map();
   private retainedPanels: Set<string> = new Set();
   private persistConfigs: Map<string, PersistConfig> = new Map();
+  // Studio embedding: when a prototype runs inside DialKit Studio, the parent
+  // drives values and the in-iframe panel is hidden. These are inert otherwise.
+  private embedded = false;
+  private panelsHidden = false;
+  // Externally pushed values buffered until their panel registers. The parent
+  // often pushes a tile's dial config before the iframe's component tree mounts.
+  private panelOverrides: Map<string, Record<string, DialValue>> = new Map();
 
   registerPanel(id: string, name: string, config: DialConfig, shortcuts?: Record<string, ShortcutConfig>, options: DialStorePanelOptions = {}): void {
     this.configurePanelRetention(id, options);
@@ -309,7 +316,13 @@ class DialStoreClass {
 
     const persisted = this.loadPersistedPanel(id);
     const previousValues = this.panels.get(id)?.values ?? this.snapshots.get(id) ?? persisted?.values ?? {};
-    const values = this.reconcileValues(defaultValues, previousValues, controlsByPath);
+    // Apply any externally pushed values (Studio) that arrived before this panel
+    // registered. They take precedence over prior/persisted values and are
+    // normalized through reconcileValues like any other value source.
+    const override = this.panelOverrides.get(id);
+    const baseForValues = override ? { ...previousValues, ...override } : previousValues;
+    this.panelOverrides.delete(id);
+    const values = this.reconcileValues(defaultValues, baseForValues, controlsByPath);
 
     const previousBaseValues = this.baseValues.get(id) ?? persisted?.baseValues ?? persisted?.values ?? {};
     const baseValues = this.reconcileValues(defaultValues, previousBaseValues, controlsByPath);
@@ -387,6 +400,7 @@ class DialStoreClass {
       this.presets.delete(id);
       this.activePreset.delete(id);
       this.persistConfigs.delete(id);
+      this.panelOverrides.delete(id);
     }
 
     this.notifyGlobal();
@@ -442,6 +456,56 @@ class DialStoreClass {
     // Create a new snapshot reference so useSyncExternalStore detects the change
     this.snapshots.set(panelId, { ...panel.values });
     this.persistPanel(panelId);
+    this.notify(panelId);
+  }
+
+  // --- DialKit Studio embedding ---------------------------------------------
+  // These let a parent window (DialKit Studio) drive a prototype running inside
+  // an iframe. They are no-ops in a normal standalone app.
+
+  setEmbedded(on: boolean): void {
+    if (this.embedded === on) return;
+    this.embedded = on;
+    this.notifyGlobal();
+  }
+
+  isEmbedded(): boolean {
+    return this.embedded;
+  }
+
+  setPanelsHidden(hidden: boolean): void {
+    if (this.panelsHidden === hidden) return;
+    this.panelsHidden = hidden;
+    this.notifyGlobal();
+  }
+
+  arePanelsHidden(): boolean {
+    return this.panelsHidden;
+  }
+
+  /**
+   * Authoritatively apply an external flat value-set to a panel (Studio
+   * value-push). Unlike updateValues, this does NOT write to baseValues/active
+   * preset or persist — external pushes are display state, not user edits.
+   * If the panel is not yet registered the values are buffered and applied at
+   * registration, which fixes the parent-pushes-before-iframe-mounts race.
+   */
+  applyExternalValues(panelId: string, values: Record<string, DialValue>): void {
+    const panel = this.panels.get(panelId);
+    if (!panel) {
+      const buffered = this.panelOverrides.get(panelId) ?? {};
+      this.panelOverrides.set(panelId, { ...buffered, ...values });
+      return;
+    }
+
+    const defaults = this.defaultValues.get(panelId) ?? panel.values;
+    const controlsByPath = this.mapControlsByPath(panel.controls);
+    // reconcileValues normalizes/drops unknown or out-of-range paths, so configs
+    // captured against a newer panel shape degrade gracefully on older ones.
+    const nextValues = this.reconcileValues(defaults, { ...panel.values, ...values }, controlsByPath);
+
+    panel.values = nextValues;
+    this.snapshots.set(panelId, { ...nextValues });
     this.notify(panelId);
   }
 

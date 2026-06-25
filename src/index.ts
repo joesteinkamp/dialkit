@@ -21,6 +21,15 @@ export { ColorControl } from './components/ColorControl';
 export { PresetManager } from './components/PresetManager';
 export { ShortcutsMenu } from './components/ShortcutsMenu';
 
+// DialKit Studio bridge (re-exported so React hosts share this build's DialStore
+// singleton; non-React adapters import the same API from `dialkit/bridge`).
+export { connectDialKitStudio, isDialKitEmbedded } from './bridge';
+export type {
+  ConnectStudioOptions,
+  StudioInboundMessage,
+  StudioOutboundMessage,
+} from './bridge';
+
 // Store (for advanced usage)
 export { DialStore } from './store/DialStore';
 export type {

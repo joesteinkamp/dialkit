@@ -30,6 +30,7 @@ interface DialRootProps {
 export function DialRoot({ position = 'top-right', defaultOpen = true, mode = 'popover', theme = 'system', productionEnabled = isDevDefault, onOpenChange }: DialRootProps) {
   if (!productionEnabled) return null;
   const [panels, setPanels] = useState<PanelConfig[]>([]);
+  const [hidden, setHidden] = useState(false);
   const [mounted, setMounted] = useState(false);
   const inline = mode === 'inline';
 
@@ -49,9 +50,11 @@ export function DialRoot({ position = 'top-right', defaultOpen = true, mode = 'p
   useEffect(() => {
     setMounted(true);
     setPanels(DialStore.getPanels());
+    setHidden(DialStore.arePanelsHidden());
 
     const unsubscribe = DialStore.subscribeGlobal(() => {
       setPanels(DialStore.getPanels());
+      setHidden(DialStore.arePanelsHidden());
     });
 
     return unsubscribe;
@@ -166,6 +169,11 @@ export function DialRoot({ position = 'top-right', defaultOpen = true, mode = 'p
 
   // Don't render if no panels registered
   if (panels.length === 0) {
+    return null;
+  }
+
+  // Hidden when DialKit Studio drives values from the parent window
+  if (hidden) {
     return null;
   }
 

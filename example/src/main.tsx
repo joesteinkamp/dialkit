@@ -1,10 +1,13 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { DialRoot } from 'dialkit';
+import { DialRoot, connectDialKitStudio } from 'dialkit';
 import 'dialkit/styles.css';
 import { PhotoStack } from './PhotoStack';
 import { Release } from './Release';
+
+// No-op unless this prototype is running inside DialKit Studio.
+connectDialKitStudio();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

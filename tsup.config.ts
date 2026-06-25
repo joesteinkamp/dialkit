@@ -4,7 +4,7 @@ import { solidPlugin } from 'esbuild-plugin-solid';
 const externalPackageStorePlugin = {
   name: 'external-package-store',
   setup(build: { onResolve: (options: { filter: RegExp }, callback: () => { path: string; external: boolean }) => void }) {
-    build.onResolve({ filter: /^\.\/store\/DialStore$/ }, () => ({
+    build.onResolve({ filter: /^\.\.?\/store\/DialStore$/ }, () => ({
       path: 'dialkit/store',
       external: true,
     }));
@@ -30,6 +30,17 @@ export default defineConfig([
       'shortcut-utils': 'src/shortcut-utils.ts',
     },
     format: ['esm'],
+    dts: true,
+    splitting: false,
+    sourcemap: true,
+    esbuildPlugins: [externalPackageStorePlugin],
+  },
+  // Bridge build (framework-agnostic; shares the external dialkit/store singleton
+  // for Solid/Vue/Svelte hosts. React hosts get it bundled via src/index.ts.)
+  {
+    entry: { index: 'src/bridge/index.ts' },
+    outDir: 'dist/bridge',
+    format: ['esm', 'cjs'],
     dts: true,
     splitting: false,
     sourcemap: true,
