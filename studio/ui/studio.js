@@ -99,6 +99,13 @@ class StudioFrame {
     );
   }
 
+  setActive(active) {
+    this.iframe.contentWindow?.postMessage(
+      { dk: 'studio', v: 1, type: 'set-active', active: !!active },
+      ORIGIN
+    );
+  }
+
   destroy() {
     window.removeEventListener('message', this._onMessage);
     clearTimeout(this._readyTimer);
@@ -305,6 +312,188 @@ function updateGridMeta() {
     : `${n} variant${n === 1 ? '' : 's'}${n > 9 ? ' — many live iframes may be heavy' : ''}`;
 }
 
+// --- Grid zoom (focus one variant, easily pop back out) ----------------------
+//
+// Zoom never re-parents an iframe (that would reload the prototype and lose its
+// live state). It promotes the existing .tile to a fixed-position stage in place
+// via a CSS class, animated by the View Transitions API (graceful no-morph
+// fallback when unsupported). Unfocused tiles are paused via set-active.
+
+let zoomedIndex = -1;
+let zoomEls = null;
+
+function withViewTransition(fn) {
+  if (document.startViewTransition) {
+    try { return document.startViewTransition(fn); } catch { /* fall through */ }
+  }
+  fn();
+  return null;
+}
+
+function zoomIconBtn(label, title, onClick) {
+  const b = document.createElement('button');
+  b.className = 'icon-btn';
+  b.title = title;
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+function ensureZoomChrome() {
+  if (zoomEls) return zoomEls;
+  const view = document.querySelector('.view[data-view="grid"]');
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'zoom-backdrop';
+  backdrop.addEventListener('click', popOut);
+
+  const bar = document.createElement('div');
+  bar.className = 'zoom-bar';
+  const prev = zoomIconBtn('‹', 'Previous variant (←)', () => traverse(-1));
+  const indexLabel = document.createElement('span');
+  indexLabel.className = 'zoom-index';
+  const next = zoomIconBtn('›', 'Next variant (→)', () => traverse(1));
+  const dialsBtn = zoomIconBtn('⚙', 'Toggle dials', toggleZoomDials);
+  const close = zoomIconBtn('✕', 'Close (Esc)', popOut);
+  bar.append(prev, indexLabel, next, dialsBtn, close);
+
+  const dials = document.createElement('div');
+  dials.className = 'zoom-dials collapsed';
+
+  view.append(backdrop, bar, dials);
+  zoomEls = { backdrop, bar, dials, indexLabel };
+  return zoomEls;
+}
+
+function insertPlaceholder(record) {
+  if (record.placeholder) return;
+  const ph = document.createElement('div');
+  ph.className = 'tile-placeholder';
+  ph.style.minHeight = `${record.tile.getBoundingClientRect().height}px`;
+  record.tile.parentNode.insertBefore(ph, record.tile);
+  record.placeholder = ph;
+}
+
+function removePlaceholder(record) {
+  record.placeholder?.remove();
+  record.placeholder = null;
+}
+
+function zoomInto(index) {
+  if (index < 0 || index >= tiles.length || index === zoomedIndex) return;
+  ensureZoomChrome();
+  const prevIndex = zoomedIndex;
+  const target = tiles[index];
+  const prev = prevIndex >= 0 ? tiles[prevIndex] : null;
+
+  // Names assigned in the BEFORE snapshot so the browser morphs geometry: the
+  // target grows from its grid slot, the previous one shrinks back to its own.
+  target.tile.style.viewTransitionName = 'zt-target';
+  if (prev) prev.tile.style.viewTransitionName = 'zt-prev';
+
+  const vt = withViewTransition(() => {
+    if (prev) {
+      prev.tile.classList.remove('is-zoomed');
+      removePlaceholder(prev);
+    } else {
+      document.getElementById('grid').classList.add('is-zooming');
+      zoomEls.backdrop.classList.add('is-visible');
+      zoomEls.bar.classList.add('is-visible');
+    }
+    insertPlaceholder(target);
+    target.tile.classList.add('is-zoomed');
+  });
+
+  const clearNames = () => {
+    target.tile.style.viewTransitionName = '';
+    if (prev) prev.tile.style.viewTransitionName = '';
+  };
+  if (vt?.finished) vt.finished.finally(clearNames); else clearNames();
+
+  zoomedIndex = index;
+  updateZoomChrome();
+  tiles.forEach((r, i) => r.frame?.setActive(i === index));
+  renderZoomDials();
+}
+
+function popOut() {
+  if (zoomedIndex < 0) return;
+  ensureZoomChrome();
+  const record = tiles[zoomedIndex];
+  if (record) record.tile.style.viewTransitionName = 'zt-target';
+
+  const vt = withViewTransition(() => {
+    if (record) {
+      record.tile.classList.remove('is-zoomed');
+      removePlaceholder(record);
+    }
+    document.getElementById('grid').classList.remove('is-zooming');
+    zoomEls.backdrop.classList.remove('is-visible');
+    zoomEls.bar.classList.remove('is-visible');
+    zoomEls.dials.classList.add('collapsed');
+  });
+
+  const clearName = () => { if (record) record.tile.style.viewTransitionName = ''; };
+  if (vt?.finished) vt.finished.finally(clearName); else clearName();
+
+  zoomedIndex = -1;
+  tiles.forEach((r) => r.frame?.setActive(true));
+}
+
+// Synchronous teardown (no transition) — used when the zoomed tile is removed
+// or the user leaves the Grid tab.
+function resetZoom() {
+  if (zoomedIndex < 0) return;
+  const record = tiles[zoomedIndex];
+  if (record) {
+    record.tile.classList.remove('is-zoomed');
+    record.tile.style.viewTransitionName = '';
+    removePlaceholder(record);
+  }
+  const grid = document.getElementById('grid');
+  grid?.classList.remove('is-zooming');
+  if (zoomEls) {
+    zoomEls.backdrop.classList.remove('is-visible');
+    zoomEls.bar.classList.remove('is-visible');
+    zoomEls.dials.classList.add('collapsed');
+  }
+  zoomedIndex = -1;
+  tiles.forEach((r) => r.frame?.setActive(true));
+}
+
+function traverse(delta) {
+  if (zoomedIndex < 0 || tiles.length < 2) return;
+  zoomInto((zoomedIndex + delta + tiles.length) % tiles.length);
+}
+
+function updateZoomChrome() {
+  if (!zoomEls || zoomedIndex < 0) return;
+  zoomEls.indexLabel.textContent = `${zoomedIndex + 1} / ${tiles.length}`;
+}
+
+function renderZoomDials() {
+  if (!zoomEls || zoomedIndex < 0) return;
+  const record = tiles[zoomedIndex];
+  if (record?.frame) renderControls(zoomEls.dials, record.frame);
+  else zoomEls.dials.innerHTML = '';
+}
+
+function toggleZoomDials() {
+  if (!zoomEls) return;
+  renderZoomDials();
+  zoomEls.dials.classList.toggle('collapsed');
+}
+
+window.addEventListener('keydown', (e) => {
+  if (zoomedIndex < 0) return;
+  const el = document.activeElement;
+  if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+  if (e.key === 'Escape') { e.preventDefault(); popOut(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); traverse(1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); traverse(-1); }
+  else if (/^[1-9]$/.test(e.key)) { e.preventDefault(); zoomInto(Number(e.key) - 1); }
+});
+
 async function addVariant(ref, label) {
   const grid = document.getElementById('grid');
   const tile = document.createElement('div');
@@ -318,6 +507,10 @@ async function addVariant(ref, label) {
   const badge = document.createElement('span');
   badge.className = 'tile-badge';
   badge.textContent = ref === 'current' ? 'current' : ref.slice(0, 7);
+  const expandBtn = document.createElement('button');
+  expandBtn.className = 'icon-btn';
+  expandBtn.title = 'Zoom in';
+  expandBtn.textContent = '⤢';
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'icon-btn';
   toggleBtn.title = 'Toggle controls';
@@ -326,11 +519,19 @@ async function addVariant(ref, label) {
   removeBtn.className = 'icon-btn';
   removeBtn.title = 'Remove';
   removeBtn.textContent = '✕';
-  head.append(labelEl, badge, toggleBtn, removeBtn);
+  head.append(labelEl, badge, expandBtn, toggleBtn, removeBtn);
 
   const frameBox = document.createElement('div');
   frameBox.className = 'tile-frame';
   frameBox.appendChild(spinnerOverlay('Building…'));
+
+  // Transparent catcher over the (non-interactive) grid iframe so a click means
+  // "zoom me", not "interact with the prototype". Hidden once zoomed (CSS), so
+  // the focused prototype is fully interactive.
+  const catcher = document.createElement('div');
+  catcher.className = 'tile-clickcatch';
+  catcher.title = 'Zoom in';
+  catcher.addEventListener('click', () => zoomInto(tiles.indexOf(record)));
 
   const controls = document.createElement('div');
   controls.className = 'tile-controls collapsed'; // start collapsed for a clean zoomed-out board
@@ -339,32 +540,46 @@ async function addVariant(ref, label) {
   tile.append(head, frameBox, controls);
   grid.appendChild(tile);
 
-  const record = { ref, tile, frame: null };
+  const record = { ref, tile, frame: null, controls, placeholder: null };
   tiles.push(record);
   updateGridMeta();
 
+  expandBtn.addEventListener('click', () => zoomInto(tiles.indexOf(record)));
+
   removeBtn.addEventListener('click', () => {
+    const idx = tiles.indexOf(record);
+    if (idx === zoomedIndex) resetZoom();
+    else if (idx < zoomedIndex) zoomedIndex -= 1;
     record.frame?.destroy();
+    removePlaceholder(record);
     tile.remove();
-    tiles.splice(tiles.indexOf(record), 1);
+    tiles.splice(idx, 1);
     updateGridMeta();
+    if (zoomedIndex >= 0) updateZoomChrome();
   });
 
   try {
     await ensureBuilt(ref);
     const frame = new StudioFrame(ref, {
-      onPanels: () => renderControls(controls, frame),
+      onPanels: () => {
+        renderControls(controls, frame);
+        if (tiles[zoomedIndex] === record) renderZoomDials();
+      },
       onBridge: (ok) => {
         if (!ok) {
           badge.classList.add('nobridge');
           badge.textContent += ' · no bridge';
           renderControls(controls, frame);
+          if (tiles[zoomedIndex] === record) renderZoomDials();
         }
       },
     });
     record.frame = frame;
+    // The focused tile is active; everything else stays paused while zoomed.
+    if (zoomedIndex >= 0) frame.setActive(tiles[zoomedIndex] === record);
     frameBox.innerHTML = '';
     frameBox.appendChild(frame.mount());
+    frameBox.appendChild(catcher);
   } catch (err) {
     frameBox.innerHTML = '';
     frameBox.appendChild(errorOverlay(String(err.message || err)));
@@ -402,11 +617,12 @@ async function openComposer() {
 // --- Tabs + boot -------------------------------------------------------------
 
 function setView(view) {
+  if (view !== 'grid' && zoomedIndex >= 0) resetZoom();
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === view));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('is-active', v.dataset.view === view));
   document.getElementById('hint').textContent =
     view === 'history' ? 'Rebuilt from git history — pick a commit to run it.'
-      : 'Each tile runs independently. Tune dials per tile.';
+      : 'Click a tile to zoom in · ← → to compare · Esc to pop out.';
 }
 
 document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.view)));
