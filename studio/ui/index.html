@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DialKit Studio</title>
+  <link rel="stylesheet" href="/studio/studio.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">DialKit <span>Studio</span></div>
+    <nav class="tabs">
+      <button class="tab is-active" data-view="history">History</button>
+      <button class="tab" data-view="grid">Grid</button>
+    </nav>
+    <div class="topbar-spacer"></div>
+    <div class="hint" id="hint"></div>
+  </header>
+
+  <!-- History: scrub the prototype's evolution, one commit at a time -->
+  <main class="view is-active" data-view="history">
+    <aside class="timeline" id="timeline"></aside>
+    <section class="stage">
+      <div class="stage-head">
+        <div id="history-title" class="stage-title">Select a version</div>
+        <div id="history-status" class="status"></div>
+      </div>
+      <div class="stage-body">
+        <div class="frame-wrap" id="history-frame-wrap"></div>
+        <div class="controls" id="history-controls"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Grid: run multiple dialed variants at once -->
+  <main class="view" data-view="grid">
+    <div class="grid-toolbar">
+      <button id="add-variant" class="btn-primary">+ Add variant</button>
+      <span class="grid-meta" id="grid-meta"></span>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <!-- Add-variant composer -->
+  <dialog id="composer">
+    <form method="dialog" class="composer">
+      <h2>Add variant</h2>
+      <label>Base version
+        <select id="composer-base"></select>
+      </label>
+      <p class="composer-note">
+        The variant starts from the base's current dials. Tune its dials on the tile
+        after it's added — each tile runs independently.
+      </p>
+      <menu>
+        <button value="cancel" class="btn">Cancel</button>
+        <button value="add" id="composer-add" class="btn-primary">Add to grid</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script type="module" src="/studio/studio.js"></script>
+</body>
+</html>

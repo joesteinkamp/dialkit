@@ -21,3 +21,6 @@ src/svelte/theme-css.ts
 .claude-plan.md
 CLAUDE.md
 AGENTS.md
+
+# DialKit Studio build cache
+.dialkit-studio/
