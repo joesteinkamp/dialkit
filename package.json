@@ -47,6 +47,16 @@
         "default": "./dist/store/index.cjs"
       }
     },
+    "./bridge": {
+      "import": {
+        "types": "./dist/bridge/index.d.ts",
+        "default": "./dist/bridge/index.js"
+      },
+      "require": {
+        "types": "./dist/bridge/index.d.cts",
+        "default": "./dist/bridge/index.cjs"
+      }
+    },
     "./svelte": {
       "types": "./dist/svelte/index.d.ts",
       "svelte": "./dist/svelte/index.js",

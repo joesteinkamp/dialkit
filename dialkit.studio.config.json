@@ -1,0 +1,7 @@
+{
+  "packageDir": "example",
+  "build": "npx vite build --base=/v/{ref}/",
+  "outDir": "dist",
+  "install": "npm install",
+  "prepare": "npm run build && (cd example && npm install)"
+}

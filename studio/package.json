@@ -1,0 +1,24 @@
+{
+  "name": "@dialkit/studio",
+  "version": "0.1.0",
+  "description": "Rebuild prototype versions from git history and run multiple dialed variants side by side",
+  "type": "module",
+  "bin": {
+    "dialkit-studio": "./src/cli.js"
+  },
+  "files": [
+    "src",
+    "ui",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node src/cli.js"
+  },
+  "keywords": [
+    "dialkit",
+    "prototyping",
+    "git",
+    "devtools"
+  ],
+  "license": "MIT"
+}
